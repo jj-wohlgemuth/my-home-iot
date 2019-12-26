@@ -1,2 +1,4 @@
 .vscode/
 esp8266/scripts/lib/credentials.py
+DS218j/config.ini
+DS218j/credentials.py
