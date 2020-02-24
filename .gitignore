@@ -6,3 +6,5 @@ esp8266-20191220-v1.12.bin
 index.html
 pymakr.conf
 DS218j/__pycache__/credentials.cpython-37.pyc
+nohup.out
+*.pyc

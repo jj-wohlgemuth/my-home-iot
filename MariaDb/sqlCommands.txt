@@ -2,8 +2,7 @@ CREATE DATABASE homeDb
 
 CREATE TABLE homeDb.iot (
     ts TIMESTAMP,
-    bath JSON,
-    kitchen JSON,
-    bed JSON,
-    outside JSON
+    data JSON,
+    topic VARCHAR(100),
+    location VARCHAR(100)
 );
