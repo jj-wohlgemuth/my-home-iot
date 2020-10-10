@@ -1,0 +1,9 @@
+plot_interval_seconds = int(60*30)
+plot_file_path = 'index.html'
+log_file_path = 'log.txt'
+html_sub_domain = 'sc'
+plot_hours = 24
+mqtt_server_ip = '192.168.1.200'
+mqtt_port = 1883
+mqtt_ping_seconds = 60
+mqtt_topic = 'climate'

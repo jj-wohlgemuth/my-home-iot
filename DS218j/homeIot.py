@@ -1,187 +1,190 @@
 import paho.mqtt.client as mqtt
-import credentials as cr
-from configparser import ConfigParser
 from mysql.connector import MySQLConnection, Error, connect
 import json
-import time,threading
+import time
+import threading
 import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from ftplib import FTP
 import os
 import fileinput
+import credentials as cr
+import config as cf
+from configparser import ConfigParser
 
-#Visualisation interval in Seconds
-visuIntervalSecs = int(60*30)
-#Path for the generated plot file
-plotFilePath     = 'index.html'
-#Path for log file
-logFilePath      = 'log.txt'
-#Subdomain for the webserver
-htmlSubDomain    = 'sc'
-#Number of past hours to visualise
-hoursBack        = 24
-#Mqtt server parameters
-mqttServerIp     = "192.168.1.200"
-mqttPort         = 1883
-mqttPingSecs     = 60
+
+def add_log(function_name, exception_name):
+    with open(cf.log_file_path, "a") as fileObj:
+        now = datetime.datetime.now()
+        now_string = now.strftime("%m/%d/%Y, %H:%M:%S")
+        fileObj.write(now_string + ": Exception in " + function_name + ":\n")
+        fileObj.write(exception_name + '\n')
+
 
 def sql_read_config(filename='DS218j/config.ini', section='mysql'):
-    '''create parser and read ini configuration file'''
     parser = ConfigParser()
     parser.read(filename)
-    # get section
     db = {}
     if parser.has_section(section):
         items = parser.items(section)
         for item in items:
             db[item[0]] = item[1]
     else:
-        raise Exception('{0} not found in the {1} file'.format(section, filename))
+        raise Exception('{0} not found in the {1} file'
+                        .format(section, filename))
     return db
 
-def sql_insert_data(locationStr,dataStr,topicStr):
+
+def sql_insert_data(location, data, topic):
     '''insert string to topic and location'''
     query = "INSERT INTO iot(location,data,topic) " \
             "VALUES(%s,%s,%s)"
-    args = (locationStr,dataStr,topicStr)
+    args = (location, data, topic)
     try:
         db_config = sql_read_config()
-        conn      = MySQLConnection(**db_config)
-        cursor    = conn.cursor()
+        conn = MySQLConnection(**db_config)
+        cursor = conn.cursor()
         cursor.execute(query, args)
         conn.commit()
-    except Error as e:
-        with open(logFilePath, "a") as fileObj:
-            fileObj.write("sql_insert_data\n")
-            fileObj.write(str(datetime.datetime.now) + ' ' +  str(e) + '\n')
+    except Exception as e:
+        add_log("sql_insert_data", str(e))
     finally:
         cursor.close()
         conn.close()
 
-def sql_read_data(hoursBack,topicStr):
-    '''open SQL connection and query all data from topic for hoursBack hours back'''
+
+def sql_read_data():
     try:
         db_config = sql_read_config()
-        conn      = MySQLConnection(**db_config)
-        cursor    = conn.cursor()
-
+        conn = MySQLConnection(**db_config)
+        cursor = conn.cursor()
         query = ("SELECT ts, location, data FROM iot WHERE ts BETWEEN"
-                " %s AND %s AND topic = '" + topicStr + "'")
-
-        queryStart = datetime.datetime.now()
-        queryEnd   = queryStart - datetime.timedelta(hours=hoursBack)
-        cursor.execute(query, (queryEnd, queryStart))
+                 " %s AND %s AND topic = '" + cf.mqtt_topic + "'")
+        query_start = datetime.datetime.now()
+        query_end = query_start - datetime.timedelta(hours=cf.plot_hours)
+        cursor.execute(query, (query_end, query_start))
         fetched = cursor.fetchall()
         cursor.close()
         conn.close()
         return fetched
-    except Error as e:
-        with open(logFilePath, "a") as fileObj:
-            fileObj.write("sql_red_data\n")
-            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
+    except Exception as e:
+        add_log("sql_read_data", str(e))
 
-def parse_for_plot(fetched):    
-    '''Parse fetched data from database for the plot'''
+
+def parse_for_plot(fetched):
     try:
         c = 0
-        dataDict = json.loads(fetched[0][2].decode("utf-8")) 
-        le       = len(fetched)
-        colDict  = {'ts':[None]*le,
-                     'location':[None]*le}
-        for i in dataDict:
-            colDict.update({i:[None]*le})
+        data_dict = json.loads(fetched[0][2].decode("utf-8"))
+        le = len(fetched)
+        col_dict = {'ts': [None]*le,
+                    'location': [None]*le}
+        for i in data_dict:
+            col_dict.update({i: [None]*le})
         for i in fetched:
-            colDict['ts'][c]       = i[0]
-            colDict['location'][c] = i[1]
-            dataDict = json.loads(i[2].decode("utf-8"))
-            for u in dataDict:
-                colDict[u][c] = dataDict[u]
+            col_dict['ts'][c] = i[0]
+            col_dict['location'][c] = i[1]
+            data_dict = json.loads(i[2].decode("utf-8"))
+            for u in data_dict:
+                col_dict[u][c] = data_dict[u]
             c += 1
-        return colDict
-    except Error as e:
-        with open(logFilePath, "a") as fileObj:
-            fileObj.write("parse_for_plot\n")
-            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
+        return col_dict
+    except Exception as e:
+        add_log("parse_for_plot", str(e))
+
 
 def plot(parsed):
-    '''plots humidity and temperature over time for all locations'''
-    fig = make_subplots(rows=2,cols=1)
+    fig = make_subplots(rows=2, cols=1)
     for location in set(parsed['location']):
+        time_vec = [parsed['ts'][i]
+                    for i in range(len(parsed['ts']))
+                    if parsed['location'][i] == location]
+        humidity_vec = [parsed['humidityPerCent'][i]
+                        for i in range(len(parsed['ts']))
+                        if parsed['location'][i] == location]
+        temp_vec = [parsed['tempCelsius'][i]
+                    for i in range(len(parsed['ts']))
+                    if parsed['location'][i] == location]
         fig.add_trace(go.Scatter(
-                            x=[parsed['ts'][i] for i in range(len(parsed['ts'])) if parsed['location'][i] == location],
-                            y=[parsed['humidityPerCent'][i] for i in range(len(parsed['ts'])) if parsed['location'][i] == location],
+                            x=time_vec,
+                            y=humidity_vec,
                             mode='lines',
-                            name='humidity ' + location),row=1,col=1)
+                            name='humidity ' + location),
+                      row=1,
+                      col=1)
         fig.add_trace(go.Scatter(
-                            x=[parsed['ts'][i] for i in range(len(parsed['ts'])) if parsed['location'][i] == location],
-                            y=[parsed['tempCelsius'][i] for i in range(len(parsed['ts'])) if parsed['location'][i] == location],
+                            x=time_vec,
+                            y=temp_vec,
                             mode='lines',
                             name='temperature ' + location),
-                            row=2,col=1)
-    fig.write_html(plotFilePath, auto_open=False)
+                      row=2,
+                      col=1)
+    fig.write_html(cf.plot_file_path, auto_open=False)
+
 
 def on_connect(client, userdata, flags, rc):
-    '''The mqtt callback for when the client receives a CONNACK response from the server.'''
+    '''The mqtt callback for when the client
+    receives a CONNACK response from the server.'''
     print("Connected with result code "+str(rc))
     client.subscribe("climate")
 
+
 def on_message(client, userdata, msg):
-    ''' The callback for when a PUBLISH message is received from the server. Inserts data from
-    mqtt to the database'''
+    ''' The callback for when a PUBLISH message is received from the server.
+    Inserts data from mqtt to the database'''
     print(msg.topic+" "+str(msg.payload))
     try:
-        payload  = json.loads(msg.payload.decode("utf-8"))
-        sql_insert_data(payload['location'],json.dumps(payload['data']),msg.topic)
+        payload = json.loads(msg.payload.decode("utf-8"))
+        sql_insert_data(payload['location'],
+                        json.dumps(payload['data']),
+                        msg.topic)
     except Exception as e:
-        with open(logFilePath, "a") as fileObj:
-            fileObj.write("on_message\n")
-            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
+        add_log("on_message", str(e))
+
 
 def upload_to_server():
     try:
-        ftpClient = FTP(host=cr.ftpHost
-                    , user=cr.ftpUser
-                    , passwd=cr.ftpPwd)
+        ftpClient = FTP(host=cr.ftp_host,
+                        user=cr.ftp_user,
+                        passwd=cr.ftp_pwd)
         ftpClient.set_debuglevel(2)
-        ftpClient.connect() 
-        ftpClient.login(cr.ftpUser,cr.ftpPwd)
-        ftpClient.cwd('/public_html/' + htmlSubDomain)
-        fp = open(plotFilePath, 'rb')
-        ftpClient.storbinary('STOR %s' % os.path.basename(plotFilePath), fp, 1024)
+        ftpClient.connect()
+        ftpClient.login(cr.ftp_user, cr.ftp_pwd)
+        ftpClient.cwd('/public_html/' + cf.html_sub_domain)
+        fp = open(cf.plot_file_path, 'rb')
+        ftpClient.storbinary('STOR %s' % os.path.basename(cf.plot_file_path),
+                             fp,
+                             1024)
         fp.close()
         ftpClient.quit()
     except Exception as e:
-        with open(logFilePath, "a") as fileObj:
-            fileObj.write("sql_red_data\n")
-            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
+        add_log("upload_to_server", str(e))
+
 
 class Visualize(threading.Thread):
-    '''The thread that reads, parses and plots climate data. The plot file gets uploaded to a ftp server.'''
     def run(self):
         while True:
-            time.sleep(visuIntervalSecs)
+            time.sleep(180)
             try:
-                fetched = sql_read_data(hoursBack,'climate')
-                parsed  = parse_for_plot(fetched)
+                fetched = sql_read_data()
+                parsed = parse_for_plot(fetched)
                 plot(parsed)
                 upload_to_server()
             except Exception as e:
-                with open(logFilePath, "a") as fileObj:
-                    fileObj.write("Visualize\n")
-                    fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
+                add_log("upload_to_server", str(e))
+            time.sleep(cf.plot_interval_seconds-180)
 
-# construct a mqtt client and start a thread to process the connection and the messages
-client            = mqtt.Client()
+
+client = mqtt.Client()
 client.username_pw_set(cr.username, password=cr.password)
 client.on_connect = on_connect
 client.on_message = on_message
-client.connect(mqttServerIp, mqttPort, mqttPingSecs)
+client.connect(cf.mqtt_server_ip, cf.mqtt_port, cf.mqtt_ping_seconds)
 client.loop_start()
 
-# the visualization thread
-Visualize(name = "visualize").start()
+# The visualization thread
+Visualize(name="visualize").start()
 
-#The main thread
+# The main thread
 while threading.activeCount() > 1:
-  time.sleep(1)
+    time.sleep(1)

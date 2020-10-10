@@ -13,7 +13,7 @@ last_temp_celsius = -273
 last_humidity_percent = 0
 
 sta_if = network.WLAN(network.STA_IF)
-dhtSensor = dht.DHT22(machine.Pin(cf.dht22_pin))
+dht_sensor = dht.DHT22(machine.Pin(cf.dht22_pin))
 mqttClient = MQTTClient('client',
                         cf.mqtt_server_ip,
                         user=cr.mqtt_username,
@@ -31,14 +31,23 @@ def do_connect():
         print('connected with network config:', sta_if.ifconfig())
 
 
-def measure_send():
+def measure():
+    temp_celsius = None
+    humidity_percent = None
+    try:
+        do_connect()
+        dht_sensor.measure()
+        temp_celsius = dht_sensor.temperature()
+        humidity_percent = dht_sensor.humidity()
+    except Exception as e:
+        print('exception: ' + str(e))
+    return temp_celsius, humidity_percent
+
+
+def send(temp_celsius, humidity_percent):
     global last_temp_celsius
     global last_humidity_percent
     try:
-        do_connect()
-        dhtSensor.measure()
-        temp_celsius = dhtSensor.temperature()
-        humidity_percent = dhtSensor.humidity()
         temp_diff_celsius = abs(last_temp_celsius-temp_celsius)
         humi_diff_percent = abs(last_humidity_percent-humidity_percent)
         if humi_diff_percent > cf.humidity_threshold_percent and\
@@ -52,12 +61,15 @@ def measure_send():
                                 'humidityPerCent': humidity_percent
                             }
                          }
-
             data_json = json.dumps(data_dict)
             mqttClient.publish(cf.mqtt_topic, data_json)
             mqttClient.disconnect()
     except Exception as e:
         print('exception: ' + str(e))
+
+
+def measure_send():
+    send(measure())
 
 
 if __name__ == "__main__":
