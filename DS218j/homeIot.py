@@ -12,9 +12,11 @@ import os
 import fileinput
 
 #Visualisation interval in Seconds
-visuIntervalSecs = int(60*1)
+visuIntervalSecs = int(60*30)
 #Path for the generated plot file
 plotFilePath     = 'index.html'
+#Path for log file
+logFilePath      = 'log.txt'
 #Subdomain for the webserver
 htmlSubDomain    = 'sc'
 #Number of past hours to visualise
@@ -49,8 +51,10 @@ def sql_insert_data(locationStr,dataStr,topicStr):
         cursor    = conn.cursor()
         cursor.execute(query, args)
         conn.commit()
-    except Error as error:
-        print(error)
+    except Error as e:
+        with open(logFilePath, "a") as fileObj:
+            fileObj.write("sql_insert_data\n")
+            fileObj.write(str(datetime.datetime.now) + ' ' +  str(e) + '\n')
     finally:
         cursor.close()
         conn.close()
@@ -72,8 +76,10 @@ def sql_read_data(hoursBack,topicStr):
         cursor.close()
         conn.close()
         return fetched
-    except Error as error:
-        print(error)
+    except Error as e:
+        with open(logFilePath, "a") as fileObj:
+            fileObj.write("sql_red_data\n")
+            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
 
 def parse_for_plot(fetched):    
     '''Parse fetched data from database for the plot'''
@@ -93,8 +99,10 @@ def parse_for_plot(fetched):
                 colDict[u][c] = dataDict[u]
             c += 1
         return colDict
-    except Error as error:
-        print(error)
+    except Error as e:
+        with open(logFilePath, "a") as fileObj:
+            fileObj.write("parse_for_plot\n")
+            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
 
 def plot(parsed):
     '''plots humidity and temperature over time for all locations'''
@@ -126,9 +134,11 @@ def on_message(client, userdata, msg):
         payload  = json.loads(msg.payload.decode("utf-8"))
         sql_insert_data(payload['location'],json.dumps(payload['data']),msg.topic)
     except Exception as e:
-        print(e)
+        with open(logFilePath, "a") as fileObj:
+            fileObj.write("on_message\n")
+            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
 
-def uploadToServer():
+def upload_to_server():
     try:
         ftpClient = FTP(host=cr.ftpHost
                     , user=cr.ftpUser
@@ -142,7 +152,9 @@ def uploadToServer():
         fp.close()
         ftpClient.quit()
     except Exception as e:
-        print(e)
+        with open(logFilePath, "a") as fileObj:
+            fileObj.write("sql_red_data\n")
+            fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
 
 class Visualize(threading.Thread):
     '''The thread that reads, parses and plots climate data. The plot file gets uploaded to a ftp server.'''
@@ -153,9 +165,11 @@ class Visualize(threading.Thread):
                 fetched = sql_read_data(hoursBack,'climate')
                 parsed  = parse_for_plot(fetched)
                 plot(parsed)
-                uploadToServer()
+                upload_to_server()
             except Exception as e:
-                print(e)
+                with open(logFilePath, "a") as fileObj:
+                    fileObj.write("Visualize\n")
+                    fileObj.write(str(datetime.datetime.now) + ' ' + str(e) + '\n')
 
 # construct a mqtt client and start a thread to process the connection and the messages
 client            = mqtt.Client()

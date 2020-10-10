@@ -1,65 +1,74 @@
-#mqtt topic for publishing
-topic            = 'climate'
-#location of the sensor
-location         = 'outside'
-#initial values for temp and humid
-lastTempCelsius  = 0
-lastHumidPerCent = 0
-#IP of the mqtt server
-mqttServerIp     ='192.168.1.200'
-'''To limit the amount of messages we only send data if both temperature and
-humidity have changed more than these threshold values'''
-tempThreshDeg    = 0.1
-humiThreshPerc   = 1
+import esp
+import upip
+from umqtt.robust import MQTTClient
+from machine import Timer
+import json
+import dht
+import machine
+import network
+import config as cf
+import credentials as cr
 
-'''Create the instances for the sensor and the mqtt client'''
-dhtSensor        = dht.DHT22(machine.Pin(0))
-mqttClient       = MQTTClient('client',
-                               mqttServerIp,
-                               user=cr.username,
-                               password=cr.password
-                             )
+last_temp_celsius = -273
+last_humidity_percent = 0
+
+sta_if = network.WLAN(network.STA_IF)
+dhtSensor = dht.DHT22(machine.Pin(cf.dht22_pin))
+mqttClient = MQTTClient('client',
+                        cf.mqtt_server_ip,
+                        user=cr.mqtt_username,
+                        password=cr.mqtt_password
+                        )
+
 
 def do_connect():
     if not sta_if.isconnected():
         print('connecting to network...')
         sta_if.active(True)
-        sta_if.connect(cr.ssid, cr.wiPw)
+        sta_if.connect(cr.ssid, cr.wifi_password)
         while not sta_if.isconnected():
             pass
         print('connected with network config:', sta_if.ifconfig())
 
-def measAndSendMqtt():
-    global lastTempCelsius
-    global lastHumidPerCent
+
+def measure_send():
+    global last_temp_celsius
+    global last_humidity_percent
     try:
         do_connect()
         dhtSensor.measure()
-        tempCelsius  = dhtSensor.temperature()
-        humidPerCent = dhtSensor.humidity()
-        tempDiff     = abs(lastTempCelsius-tempCelsius)
-        humiDiff     = abs(lastHumidPerCent-humidPerCent)
-        if humiDiff > humiThreshPerc and tempDiff > tempThreshDeg:
+        temp_celsius = dhtSensor.temperature()
+        humidity_percent = dhtSensor.humidity()
+        temp_diff_celsius = abs(last_temp_celsius-temp_celsius)
+        humi_diff_percent = abs(last_humidity_percent-humidity_percent)
+        if humi_diff_percent > cf.humidity_threshold_percent and\
+           temp_diff_celsius > cf.temperature_threshold_celsius:
             mqttClient.connect()
-            lastTempCelsius  = tempCelsius 
-            lastHumidPerCent = humidPerCent
+            last_temp_celsius = temp_celsius
+            last_humidity_percent = humidity_percent
+            data_dict = {'location': cf.location,
+                         'data': {
+                                'tempCelsius': temp_celsius,
+                                'humidityPerCent': humidity_percent
+                            }
+                         }
 
-            dataDict = {'location':location
-                        ,'data':{'tempCelsius':tempCelsius,
-                                 'humidityPerCent':humidPerCent
-                                 }
-                        }
-            dataJson = json.dumps(dataDict)
-            mqttClient.publish(topic,dataJson)
+            data_json = json.dumps(data_dict)
+            mqttClient.publish(cf.mqtt_topic, data_json)
             mqttClient.disconnect()
     except Exception as e:
         print('exception: ' + str(e))
 
+
 if __name__ == "__main__":
-    '''Will measure and eventually publish every 10 seconds. If you significantly reduce this time
+    '''Will measure and eventually publish every 10 seconds.
+    If you significantly reduce this time
     you risk bricking the chip'''
     try:
         tim = Timer(-1)
-        tim.init(period=10000, mode=Timer.PERIODIC, callback=lambda t:measAndSendMqtt())
+        tim.init(period=10000,
+                 mode=Timer.PERIODIC,
+                 callback=lambda t: measure_send()
+                 )
     except Exception as e:
         print(e)
