@@ -176,7 +176,7 @@ class Visualize(threading.Thread):
 
 
 client = mqtt.Client()
-client.username_pw_set(cr.username, password=cr.password)
+client.username_pw_set(cr.mqtt_username, password=cr.mqtt_password)
 client.on_connect = on_connect
 client.on_message = on_message
 client.connect(cf.mqtt_server_ip, cf.mqtt_port, cf.mqtt_ping_seconds)

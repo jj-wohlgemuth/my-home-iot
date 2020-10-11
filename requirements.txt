@@ -1,0 +1,5 @@
+paho-mqtt
+plotly
+mysqlclient
+mysql-connector-python
+pymysql
