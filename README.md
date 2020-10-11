@@ -11,7 +11,7 @@ The project supports a high number of DHT22 sensors without altering the code (I
 
 The budget for this project was 34.28  Euros. With that I bought:
  * Three DHT22 sensors
- * Five AZDelivery ESP8266 Wifi Boards and USB programmers that also serve as power supplies
+ * Five AZDelivery ESP8266 WiFi Boards and USB programmers that also serve as power supplies
 
  With that I built three WiFi temperature and humidity sensors. The remaining two ESP8266s will one day be used for other IoT projects. I'm sure ESP32s do the trick as well but the ESP8266 is cheaper. In Addition you need
  * WiFi
@@ -137,6 +137,18 @@ ftp_host = "***YOUR FTP HOST***"
 ftp_user = "***YOUR FTP USER***"
 ftp_pwd = "***YOUR FTP PW***"
 ```
+
+Now run 
+
+```
+python DS218j\homeIot.py
+```
+You should see the MQTT packages coming in, the database being filled, a local index.html file being created and the file being uploaded to your FTP server where you can access it via the subdomain. To have the script run permanently in the background and restart when I reboot my Synology I added
+```
+cd volume1/**YOURPATH**/my-home-iot/ && /usr/local/bin/python3 ./DS218j/homeIot.py &```
+```
+to my task scheduler (crontab) at boot up.
+
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

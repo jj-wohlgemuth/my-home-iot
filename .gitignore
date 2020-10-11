@@ -8,3 +8,4 @@ pymakr.conf
 DS218j/__pycache__/credentials.cpython-37.pyc
 nohup.out
 *.pyc
+log
