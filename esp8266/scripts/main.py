@@ -69,7 +69,8 @@ def send(temp_celsius, humidity_percent):
 
 
 def measure_send():
-    send(measure())
+    temp_celsius, humidity_percent = measure()
+    send(temp_celsius, humidity_percent)
 
 
 if __name__ == "__main__":

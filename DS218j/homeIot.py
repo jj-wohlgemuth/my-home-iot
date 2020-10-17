@@ -119,6 +119,8 @@ def plot(parsed):
                             name='temperature ' + location),
                       row=2,
                       col=1)
+    fig['layout']['yaxis1']['title'] = 'Humidity in percent'
+    fig['layout']['yaxis2']['title'] = 'Temperature in °C'
     fig.write_html(cf.plot_file_path, auto_open=False)
 
 
