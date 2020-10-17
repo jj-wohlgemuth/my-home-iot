@@ -27,14 +27,11 @@ In order to make this work you need a MQTT broker in your network. I used the [M
 
 There is lot's of [tutorials](https://randomnerdtutorials.com/esp8266-dht11dht22-temperature-and-humidity-web-server-with-arduino-ide/) on how to connect a DHT22 to a serial input. Just don't forget the 4.7k Ohm resistor and you'll be fine. I crammed the USB programmer and the ESP Board into a little plastic box and glued the sensor to the top of it.
 
-![sensor](https://user-images.githubusercontent.com/52459869/96334017-cc4cd880-106d-11eb-9db7-5ac3adf75466.jpg "sensor")
-![sensor](https://user-images.githubusercontent.com/52459869/96334415-fc49ab00-1070-11eb-9fba-55dae1967159.jpg "sensor")
-
 ### Micropython
 
 The virgin ESP boards don't run Micropython. You need to [flash the Micropython firmware.](https://docs.micropython.org/en/latest/esp8266/tutorial/intro.html) If you use the AZDelivery boards like me you need to solder an additional button to one of the USB programmers. Before you erase the flash and before you write to the flash you need to press and hold the button while plugging it into your USB port. 
 
-![button](https://user-images.githubusercontent.com/52459869/96334016-cc4cd880-106d-11eb-8b71-ab77c6e2b104.jpg "button")
+<img src="https://user-images.githubusercontent.com/52459869/96334016-cc4cd880-106d-11eb-8b71-ab77c6e2b104.jpg" alt="button" width="350"/>
 
 To erase and write you can use [esptool.py](https://pypi.org/project/esptool/). 
 ```
@@ -178,13 +175,20 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## Sensor gallery
 Outside sensor using a 5V power supply inside the housing of an unused lamp.
-![outside open](https://user-images.githubusercontent.com/52459869/96334010-c951e800-106d-11eb-9454-86266b4d1d35.jpg "outside open")
-![outside closed](https://user-images.githubusercontent.com/52459869/96334012-ca831500-106d-11eb-99c5-bf6f3cc9e3e2.jpg "outside closed")
+
+<img src="https://user-images.githubusercontent.com/52459869/96334010-c951e800-106d-11eb-9454-86266b4d1d35.jpg " alt="outside sensor closed" width="350"/>
+<img src="https://user-images.githubusercontent.com/52459869/96334012-ca831500-106d-11eb-99c5-bf6f3cc9e3e2.jpg" alt="outside sensor closed" width="350"/>
 
 Kitchen sensor hidden under the fridge.
-![kitchen](https://user-images.githubusercontent.com/52459869/96334014-cb1bab80-106d-11eb-8e5c-29c9c3055b32.jpg "kitchen")
+
+<img src="https://user-images.githubusercontent.com/52459869/96334014-cb1bab80-106d-11eb-8e5c-29c9c3055b32.jpg" alt="kitchen sensor" width="350"/>
 
 Bedroom sensor connected the the USB charging port of my alarm clock.
-![bedroom](https://user-images.githubusercontent.com/52459869/96334015-cbb44200-106d-11eb-8b63-3f6ffe508e7c.jpg "bedroom")
 
+<img src="https://user-images.githubusercontent.com/52459869/96334015-cbb44200-106d-11eb-8b63-3f6ffe508e7c.jpg" alt="bedroom sensor" width="350"/>
 
+Here's how I connected the board and the DHT22.
+
+![sensor]("sensor")
+<img src="https://user-images.githubusercontent.com/52459869/96334017-cc4cd880-106d-11eb-9db7-5ac3adf75466.jpg" alt="button" width="350"/>
+<img src="https://user-images.githubusercontent.com/52459869/96334415-fc49ab00-1070-11eb-9fba-55dae1967159.jpg" alt="button" width="350"/>
