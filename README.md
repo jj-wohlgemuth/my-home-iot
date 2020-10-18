@@ -4,6 +4,8 @@ The goal of this project was to be able to monitor and store humidity and temper
 
 ![Block Diagram](https://user-images.githubusercontent.com/52459869/96334457-42067380-1071-11eb-89f0-df4ec9369ef0.png "Block Diagram")
 
+![chart](https://user-images.githubusercontent.com/52459869/96367546-bfec7c80-114e-11eb-8455-23349c2e154d.jpg "chart")
+
 The project supports a high number of DHT22 sensors without altering the code (If you find out the limiting factor for the max number of sensors let me know). Each sensor is hooked up to a ESP8266 which sends the sensor readings via WiFi to the MQTT broker. A machine in the network runs a MQTT client and parses the sensor readings into a SQL database. A HTML plot file gets generated at a predefined frequency (default: 30 minutes) and uploaded to a web server. 
 
 ## Setup
