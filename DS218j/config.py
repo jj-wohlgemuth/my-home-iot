@@ -6,4 +6,4 @@ plot_hours = 24
 mqtt_server_ip = '192.168.1.200'
 mqtt_port = 1883
 mqtt_ping_seconds = 60
-mqtt_topic = 'climate'
+mqtt_topic = [("climate", 0), ("zigbee2mqtt/living_room_heater", 0)]

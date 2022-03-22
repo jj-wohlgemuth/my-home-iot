@@ -13,6 +13,8 @@ import credentials as cr
 import config as cf
 from configparser import ConfigParser
 
+current_heating_setpoint_celsius = 20
+
 
 def add_log(function_name, exception_name):
     with open(cf.log_file_path, "a") as fileObj:
@@ -20,6 +22,8 @@ def add_log(function_name, exception_name):
         now_string = now.strftime("%m/%d/%Y, %H:%M:%S")
         fileObj.write(now_string + ": Exception in " + function_name + ":\n")
         fileObj.write(exception_name + '\n')
+        print(now_string + ": Exception in " + function_name + ":\n")
+        print(exception_name + '\n')
 
 
 def sql_read_config(filename='DS218j/config.ini', section='mysql'):
@@ -60,7 +64,7 @@ def sql_read_data():
         conn = MySQLConnection(**db_config)
         cursor = conn.cursor()
         query = ("SELECT ts, location, data FROM iot WHERE ts BETWEEN"
-                 " %s AND %s AND topic = '" + cf.mqtt_topic + "'")
+                 " %s AND %s AND topic = 'climate'")
         query_start = datetime.datetime.now()
         query_end = query_start - datetime.timedelta(hours=cf.plot_hours)
         cursor.execute(query, (query_end, query_start))
@@ -70,6 +74,33 @@ def sql_read_data():
         return fetched
     except Exception as e:
         add_log("sql_read_data", str(e))
+
+
+def sql_get_last_temp(location):
+    db_config = sql_read_config()
+    conn = MySQLConnection(**db_config)
+    cursor = conn.cursor()
+    query = ("SELECT data FROM iot WHERE location = '" + location + "'"
+             "ORDER BY ts DESC LIMIT 1")
+    cursor.execute(query)
+    fetched = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    fetched = json.loads(fetched[0][0].decode("utf-8"))
+    return fetched['tempCelsius']
+
+
+def determine_temp_diff():
+    try:
+        client.publish('zigbee2mqtt/living_room_heater/get',
+                       '{"local_temperature": ""}')
+        time.sleep(5)
+        bedroom_temp_celsius = sql_get_last_temp('bedroom')
+        armchair_temp_celsius = sql_get_last_temp('armchair')
+        return round(bedroom_temp_celsius -
+                     armchair_temp_celsius, 1)
+    except Exception as e:
+        add_log("determine_temp_diff", str(e))
 
 
 def parse_for_plot(fetched):
@@ -101,7 +132,8 @@ def plot(parsed):
                     if parsed['location'][i] == location]
         humidity_vec = [parsed['humidityPerCent'][i]
                         for i in range(len(parsed['ts']))
-                        if parsed['location'][i] == location]
+                        if ((parsed['location'][i] == location) 
+                        and (type(parsed['humidityPerCent'][i]) == float))]
         temp_vec = [parsed['tempCelsius'][i]
                     for i in range(len(parsed['ts']))
                     if parsed['location'][i] == location]
@@ -128,7 +160,13 @@ def on_connect(client, userdata, flags, rc):
     '''The mqtt callback for when the client
     receives a CONNACK response from the server.'''
     print("Connected with result code "+str(rc))
-    client.subscribe("climate")
+    client.subscribe(cf.mqtt_topic)
+
+
+def parse_heater_temp(payload):
+    returnDict = {"tempCelsius": float(payload['local_temperature']),
+                  "humidityPerCent": ""}
+    return json.dumps(returnDict)
 
 
 def on_message(client, userdata, msg):
@@ -137,9 +175,14 @@ def on_message(client, userdata, msg):
     print(msg.topic+" "+str(msg.payload))
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
-        sql_insert_data(payload['location'],
-                        json.dumps(payload['data']),
-                        msg.topic)
+        if msg.topic == 'climate':
+            sql_insert_data(payload['location'],
+                            json.dumps(payload['data']),
+                            msg.topic)
+        else:
+            sql_insert_data('armchair',
+                            parse_heater_temp(payload),
+                            'climate')
     except Exception as e:
         add_log("on_message", str(e))
 
@@ -152,7 +195,7 @@ def upload_to_server():
         ftpClient.set_debuglevel(2)
         ftpClient.connect()
         ftpClient.login(cr.ftp_user, cr.ftp_pwd)
-        ftpClient.cwd('/public_html/' + cf.html_sub_domain)
+        # ftpClient.cwd('/public_html/' + cf.html_sub_domain)
         fp = open(cf.plot_file_path, 'rb')
         ftpClient.storbinary('STOR %s' % os.path.basename(cf.plot_file_path),
                              fp,
@@ -163,11 +206,41 @@ def upload_to_server():
         add_log("upload_to_server", str(e))
 
 
+def set_heating_setpoint(new_setpoint):
+    client.publish('zigbee2mqtt/living_room_heater/set',
+                   '{"preset": "manual"}')
+    client.publish('zigbee2mqtt/living_room_heater/set',
+                   '{"current_heating_setpoint": "' + str(new_setpoint) +
+                   '"}')
+
+
+def is_night():
+    night_beg = datetime.time(hour=18)
+    night_end = datetime.time(hour=6)
+    now_hour = datetime.datetime.now().hour
+    if((now_hour > night_beg.hour) or
+       (now_hour) < night_end.hour):
+        return True
+    else:
+        return False
+
+
+def adjust_heating_setpoint():
+    if (is_night()):
+        current_heating_setpoint_celsius = 16
+    else:
+        current_heating_setpoint_celsius = 19
+    temp_diff = determine_temp_diff()
+    new_setp = current_heating_setpoint_celsius - temp_diff
+    set_heating_setpoint(new_setp)
+
+
 class Visualize(threading.Thread):
     def run(self):
         while True:
             time.sleep(180)
             try:
+                adjust_heating_setpoint()
                 fetched = sql_read_data()
                 parsed = parse_for_plot(fetched)
                 plot(parsed)
@@ -177,14 +250,28 @@ class Visualize(threading.Thread):
             time.sleep(cf.plot_interval_seconds-180)
 
 
-client = mqtt.Client()
-client.username_pw_set(cr.mqtt_username, password=cr.mqtt_password)
-client.on_connect = on_connect
-client.on_message = on_message
-client.connect(cf.mqtt_server_ip, cf.mqtt_port, cf.mqtt_ping_seconds)
-client.loop_start()
+network_up = False
+while not network_up:
+    try:
+        client = mqtt.Client()
+        client.on_connect = on_connect
+        client.on_message = on_message
+        client.connect(cf.mqtt_server_ip, cf.mqtt_port, cf.mqtt_ping_seconds)
+        client.loop_start()
+        network_up = True
+    except Exception as e:
+        add_log("mqtt connect", str(e))
+        time.sleep(5)
 
 # The visualization thread
+try:
+    adjust_heating_setpoint()
+    fetched = sql_read_data()
+    parsed = parse_for_plot(fetched)
+    plot(parsed)
+    upload_to_server()
+except Exception as e:
+    add_log("upload_to_server", str(e))
 Visualize(name="visualize").start()
 
 # The main thread
