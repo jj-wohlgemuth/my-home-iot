@@ -3,3 +3,4 @@ plotly
 mysqlclient
 mysql-connector-python
 pymysql
+dash

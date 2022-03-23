@@ -90,19 +90,6 @@ def sql_get_last_temp(location):
     return fetched['tempCelsius']
 
 
-def determine_temp_diff():
-    try:
-        client.publish('zigbee2mqtt/living_room_heater/get',
-                       '{"local_temperature": ""}')
-        time.sleep(5)
-        bedroom_temp_celsius = sql_get_last_temp('bedroom')
-        armchair_temp_celsius = sql_get_last_temp('armchair')
-        return round(bedroom_temp_celsius -
-                     armchair_temp_celsius, 1)
-    except Exception as e:
-        add_log("determine_temp_diff", str(e))
-
-
 def parse_for_plot(fetched):
     try:
         c = 0
@@ -206,6 +193,16 @@ def upload_to_server():
         add_log("upload_to_server", str(e))
 
 
+def determine_temp_diff():
+    try:
+        bedroom_temp_celsius = sql_get_last_temp('bedroom')
+        armchair_temp_celsius = sql_get_last_temp('armchair')
+        return round(bedroom_temp_celsius -
+                     armchair_temp_celsius, 1)
+    except Exception as e:
+        add_log("determine_temp_diff", str(e))
+
+
 def set_heating_setpoint(new_setpoint):
     client.publish('zigbee2mqtt/living_room_heater/set',
                    '{"preset": "manual"}')
@@ -227,9 +224,9 @@ def is_night():
 
 def adjust_heating_setpoint():
     if (is_night()):
-        current_heating_setpoint_celsius = 16
+        current_heating_setpoint_celsius = 17
     else:
-        current_heating_setpoint_celsius = 19
+        current_heating_setpoint_celsius = 22
     temp_diff = determine_temp_diff()
     new_setp = current_heating_setpoint_celsius - temp_diff
     set_heating_setpoint(new_setp)
